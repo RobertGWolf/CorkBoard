@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Board } from './components/Board';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -12,8 +13,8 @@ const queryClient = new QueryClient({
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="h-screen w-screen bg-amber-50 flex items-center justify-center">
-        <p className="text-amber-800 text-lg">CorkBoard — loading...</p>
+      <div className="h-screen w-screen flex flex-col">
+        <Board />
       </div>
     </QueryClientProvider>
   );
