@@ -11,6 +11,7 @@ export function Toolbar() {
 
   const currentBoardId = useBoardStore((s) => s.currentBoardId);
   const setCurrentBoardId = useBoardStore((s) => s.setCurrentBoardId);
+  const connectMode = useBoardStore((s) => s.connectMode);
 
   const createCard = useCreateCard(currentBoardId ?? '');
 
@@ -141,6 +142,21 @@ export function Toolbar() {
         className="px-3 py-1 text-sm text-amber-800 hover:bg-amber-200 rounded"
       >
         + Add Card
+      </button>
+
+      <div className="h-6 w-px bg-amber-300" />
+
+      {/* Connect Mode Toggle */}
+      <button
+        onClick={() => useBoardStore.getState().toggleConnectMode()}
+        className={`px-3 py-1 text-sm rounded ${
+          connectMode
+            ? 'bg-amber-600 text-white'
+            : 'text-amber-800 hover:bg-amber-200'
+        }`}
+        title="Toggle connect mode (C)"
+      >
+        Connect
       </button>
 
       <div className="flex-1" />

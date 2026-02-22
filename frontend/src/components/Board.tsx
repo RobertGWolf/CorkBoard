@@ -1,9 +1,11 @@
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { useBoardStore } from '../stores/boardStore';
 import { useBoardData, useCreateCard, useDeleteCard, useUpdateCard } from '../hooks/useCards';
+import { useCreateConnection, useDeleteConnection, useUpdateConnection } from '../hooks/useConnections';
 import { useBoardDrag } from '../hooks/useDrag';
 import { Card } from './Card';
+import { ConnectionLayer } from './ConnectionLayer';
 import type { Card as CardType } from '../types';
 
 const BOARD_SIZE = 3000;
@@ -13,13 +15,20 @@ export function Board() {
   const setViewport = useBoardStore((s) => s.setViewport);
   const currentBoardId = useBoardStore((s) => s.currentBoardId);
   const clearSelection = useBoardStore((s) => s.clearSelection);
-
+  const connectMode = useBoardStore((s) => s.connectMode);
+  const connectSourceId = useBoardStore((s) => s.connectSourceId);
+  const setConnectSource = useBoardStore((s) => s.setConnectSource);
+  const toggleConnectMode = useBoardStore((s) => s.toggleConnectMode);
   const { data: boardData } = useBoardData(currentBoardId);
   const createCard = useCreateCard(currentBoardId ?? '');
   const updateCard = useUpdateCard(currentBoardId ?? '');
   const deleteCard = useDeleteCard(currentBoardId ?? '');
+  const createConnection = useCreateConnection(currentBoardId ?? '');
+  const deleteConnection = useDeleteConnection(currentBoardId ?? '');
+  const updateConnection = useUpdateConnection(currentBoardId ?? '');
 
   const cards = useMemo(() => boardData?.cards ?? [], [boardData?.cards]);
+  const connections = useMemo(() => boardData?.connections ?? [], [boardData?.connections]);
 
   const handleUpdateCard = useCallback(
     (data: Partial<CardType> & { id: string }) => {
@@ -36,7 +45,50 @@ export function Board() {
     [deleteCard, clearSelection]
   );
 
-  // Drag system
+  // Connect mode: handle card click to select source/target
+  const handleCardClickInConnectMode = useCallback(
+    (cardId: string) => {
+      if (!connectSourceId) {
+        // First click — select source
+        setConnectSource(cardId);
+      } else if (connectSourceId === cardId) {
+        // Clicked same card — deselect source
+        setConnectSource(null);
+      } else {
+        // Second click — validate and create connection
+        const isDuplicate = connections.some(
+          (c) =>
+            (c.from_card_id === connectSourceId && c.to_card_id === cardId) ||
+            (c.from_card_id === cardId && c.to_card_id === connectSourceId)
+        );
+        if (!isDuplicate) {
+          createConnection.mutate({
+            from_card_id: connectSourceId,
+            to_card_id: cardId,
+          });
+        }
+        setConnectSource(null);
+      }
+    },
+    [connectSourceId, setConnectSource, connections, createConnection]
+  );
+
+  const handleDeleteConnection = useCallback(
+    (id: string) => {
+      deleteConnection.mutate(id);
+      useBoardStore.getState().selectConnection(null);
+    },
+    [deleteConnection]
+  );
+
+  const handleUpdateConnection = useCallback(
+    (id: string, color: string) => {
+      updateConnection.mutate({ id, color });
+    },
+    [updateConnection]
+  );
+
+  // Drag system — disabled in connect mode
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 5 },
@@ -47,6 +99,48 @@ export function Board() {
     cards,
     onUpdateCard: handleUpdateCard,
   });
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isTyping =
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable;
+
+      if (isTyping) return;
+
+      // C key — toggle connect mode
+      if (e.key === 'c' || e.key === 'C') {
+        if (!e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          toggleConnectMode();
+        }
+      }
+
+      // Escape — exit connect mode / clear selection
+      if (e.key === 'Escape') {
+        if (connectMode) {
+          toggleConnectMode();
+        } else {
+          clearSelection();
+        }
+      }
+
+      // Delete/Backspace — delete selected connection
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const connId = useBoardStore.getState().selectedConnectionId;
+        if (connId) {
+          e.preventDefault();
+          handleDeleteConnection(connId);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [connectMode, toggleConnectMode, clearSelection, handleDeleteConnection]);
 
   // Pan/zoom
   const isPanning = useRef(false);
@@ -115,6 +209,7 @@ export function Board() {
     (e: React.MouseEvent<HTMLDivElement>) => {
       if (e.target !== e.currentTarget) return;
       if (!currentBoardId) return;
+      if (connectMode) return;
 
       const rect = boardInnerRef.current?.getBoundingClientRect();
       if (!rect) return;
@@ -127,22 +222,33 @@ export function Board() {
 
       createCard.mutate({ x, y });
     },
-    [currentBoardId, createCard]
+    [currentBoardId, createCard, connectMode]
   );
 
   return (
     <DndContext
-      sensors={sensors}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
+      sensors={connectMode ? [] : sensors}
+      onDragStart={connectMode ? undefined : handleDragStart}
+      onDragEnd={connectMode ? undefined : handleDragEnd}
     >
       <div
-        className="w-full h-full overflow-hidden relative bg-amber-50"
+        className={`w-full h-full overflow-hidden relative bg-amber-50 ${
+          connectMode ? 'cursor-crosshair' : ''
+        }`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onWheel={handleWheel}
       >
+        {/* Connect mode banner */}
+        {connectMode && (
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 px-4 py-1.5 bg-amber-600 text-white text-sm rounded-full shadow-lg">
+            {connectSourceId
+              ? 'Click a target card to connect — Escape to cancel'
+              : 'Click a source card — Escape to cancel'}
+          </div>
+        )}
+
         <div
           ref={boardInnerRef}
           className="absolute origin-top-left"
@@ -153,12 +259,24 @@ export function Board() {
           }}
           onDoubleClick={handleDoubleClick}
         >
+          {/* Connection layer — behind cards (z-index 0) */}
+          <ConnectionLayer
+            cards={cards}
+            connections={connections}
+            onDeleteConnection={handleDeleteConnection}
+            onUpdateConnection={handleUpdateConnection}
+          />
+
+          {/* Cards — rendered above connections */}
           {cards.map((card) => (
             <Card
               key={card.id}
               card={card}
               onUpdate={handleUpdateCard}
               onDelete={handleDeleteCard}
+              connectMode={connectMode}
+              isConnectSource={connectSourceId === card.id}
+              onConnectClick={handleCardClickInConnectMode}
             />
           ))}
         </div>

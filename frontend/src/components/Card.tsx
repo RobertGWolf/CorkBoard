@@ -11,9 +11,19 @@ interface CardProps {
   card: CardType;
   onUpdate: (data: Partial<CardType> & { id: string }) => void;
   onDelete: (id: string) => void;
+  connectMode?: boolean;
+  isConnectSource?: boolean;
+  onConnectClick?: (cardId: string) => void;
 }
 
-export function Card({ card, onUpdate, onDelete }: CardProps) {
+export function Card({
+  card,
+  onUpdate,
+  onDelete,
+  connectMode = false,
+  isConnectSource = false,
+  onConnectClick,
+}: CardProps) {
   const selectedCardId = useBoardStore((s) => s.selectedCardId);
   const selectCard = useBoardStore((s) => s.selectCard);
   const [isEditing, setIsEditing] = useState(false);
@@ -29,34 +39,42 @@ export function Card({ card, onUpdate, onDelete }: CardProps) {
 
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: card.id,
-    disabled: isEditing || isResizing,
+    disabled: isEditing || isResizing || connectMode,
   });
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
+
+      if (connectMode && onConnectClick) {
+        onConnectClick(card.id);
+        return;
+      }
+
       if (!isEditing) {
         selectCard(card.id);
       }
     },
-    [card.id, isEditing, selectCard]
+    [card.id, isEditing, selectCard, connectMode, onConnectClick]
   );
 
   const handleDoubleClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
+      if (connectMode) return;
       setIsEditing(true);
     },
-    []
+    [connectMode]
   );
 
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      if (connectMode) return;
       setShowColorPicker(true);
     },
-    []
+    [connectMode]
   );
 
   const handleColorChange = useCallback(
@@ -79,6 +97,7 @@ export function Card({ card, onUpdate, onDelete }: CardProps) {
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (isEditing) return;
+      if (connectMode) return;
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         if (card.content.trim() === '') {
@@ -92,7 +111,7 @@ export function Card({ card, onUpdate, onDelete }: CardProps) {
         useBoardStore.getState().clearSelection();
       }
     },
-    [card.id, card.content, isEditing, onDelete]
+    [card.id, card.content, isEditing, connectMode, onDelete]
   );
 
   const style: React.CSSProperties = {
@@ -107,15 +126,24 @@ export function Card({ card, onUpdate, onDelete }: CardProps) {
       : {}),
   };
 
-  const showResizeHandle = (isSelected || isHovered) && !isEditing;
+  const showResizeHandle = (isSelected || isHovered) && !isEditing && !connectMode;
+
+  // Visual ring: connect source highlight (green) > editing (blue) > selected (amber)
+  let ringClass = '';
+  if (isConnectSource) {
+    ringClass = 'ring-2 ring-green-500 ring-offset-1';
+  } else if (isEditing) {
+    ringClass = 'ring-2 ring-blue-400';
+  } else if (isSelected && !connectMode) {
+    ringClass = 'ring-2 ring-amber-500';
+  }
 
   return (
     <div
       ref={setNodeRef}
-      className={`absolute rounded-lg shadow-md cursor-default select-none
-        ${isSelected ? 'ring-2 ring-amber-500' : ''}
-        ${isEditing ? 'ring-2 ring-blue-400' : ''}
-      `}
+      className={`absolute rounded-lg shadow-md select-none ${ringClass} ${
+        connectMode ? 'cursor-pointer' : 'cursor-default'
+      }`}
       style={style}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
@@ -123,11 +151,11 @@ export function Card({ card, onUpdate, onDelete }: CardProps) {
       onKeyDown={handleKeyDown}
       onPointerEnter={() => setIsHovered(true)}
       onPointerLeave={() => setIsHovered(false)}
-      {...listeners}
-      {...attributes}
+      {...(connectMode ? {} : listeners)}
+      {...(connectMode ? {} : attributes)}
     >
-      {/* Color indicator — visible on hover/selected */}
-      {(isSelected || isHovered) && !isEditing && (
+      {/* Color indicator — visible on hover/selected, hidden in connect mode */}
+      {(isSelected || isHovered) && !isEditing && !connectMode && (
         <div className="absolute top-1 right-1 z-10">
           <button
             onClick={(e) => {
