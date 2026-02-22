@@ -1,28 +1,39 @@
 import { useCallback, useRef } from 'react';
 import { useBoardStore } from '../stores/boardStore';
+import { useBoardData, useCreateCard, useDeleteCard, useUpdateCard } from '../hooks/useCards';
+import { Card } from './Card';
+import type { Card as CardType } from '../types';
 
 const BOARD_SIZE = 3000;
 
 export function Board() {
   const viewport = useBoardStore((s) => s.viewport);
   const setViewport = useBoardStore((s) => s.setViewport);
+  const currentBoardId = useBoardStore((s) => s.currentBoardId);
+  const clearSelection = useBoardStore((s) => s.clearSelection);
+
+  const { data: boardData } = useBoardData(currentBoardId);
+  const createCard = useCreateCard(currentBoardId ?? '');
+  const updateCard = useUpdateCard(currentBoardId ?? '');
+  const deleteCard = useDeleteCard(currentBoardId ?? '');
 
   const isPanning = useRef(false);
   const panStart = useRef({ x: 0, y: 0 });
   const viewportStart = useRef({ x: 0, y: 0 });
+  const boardInnerRef = useRef<HTMLDivElement>(null);
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      // Only pan on direct clicks on the board background (not on cards)
       if (e.target !== e.currentTarget) return;
       if (e.button !== 0) return;
 
+      clearSelection();
       isPanning.current = true;
       panStart.current = { x: e.clientX, y: e.clientY };
       viewportStart.current = { x: viewport.x, y: viewport.y };
       (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
     },
-    [viewport.x, viewport.y]
+    [viewport.x, viewport.y, clearSelection]
   );
 
   const handlePointerMove = useCallback(
@@ -50,8 +61,6 @@ export function Board() {
 
       const container = e.currentTarget;
       const rect = container.getBoundingClientRect();
-
-      // Cursor position relative to container
       const cursorX = e.clientX - rect.left;
       const cursorY = e.clientY - rect.top;
 
@@ -61,7 +70,6 @@ export function Board() {
 
       if (newZoom === oldZoom) return;
 
-      // Adjust viewport to keep cursor position stable
       const scale = newZoom / oldZoom;
       const newX = cursorX - scale * (cursorX - viewport.x);
       const newY = cursorY - scale * (cursorY - viewport.y);
@@ -71,6 +79,42 @@ export function Board() {
     [viewport.x, viewport.y, viewport.zoom, setViewport]
   );
 
+  const handleDoubleClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (e.target !== e.currentTarget) return;
+      if (!currentBoardId) return;
+
+      // Convert screen position to board percentage
+      const rect = boardInnerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const boardX = ((e.clientX - rect.left) / rect.width) * 100;
+      const boardY = ((e.clientY - rect.top) / rect.height) * 100;
+
+      // Clamp to valid range and offset so card is centered on cursor
+      const x = Math.max(0, Math.min(85, boardX - 7.5));
+      const y = Math.max(0, Math.min(90, boardY - 5));
+
+      createCard.mutate({ x, y });
+    },
+    [currentBoardId, createCard]
+  );
+
+  const handleUpdateCard = useCallback(
+    (data: Partial<CardType> & { id: string }) => {
+      updateCard.mutate(data);
+    },
+    [updateCard]
+  );
+
+  const handleDeleteCard = useCallback(
+    (id: string) => {
+      deleteCard.mutate(id);
+      clearSelection();
+    },
+    [deleteCard, clearSelection]
+  );
+
   return (
     <div
       className="w-full h-full overflow-hidden relative bg-amber-50"
@@ -78,17 +122,25 @@ export function Board() {
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onWheel={handleWheel}
-      style={{ cursor: isPanning.current ? 'grabbing' : 'default' }}
     >
       <div
+        ref={boardInnerRef}
         className="absolute origin-top-left"
         style={{
           width: BOARD_SIZE,
           height: BOARD_SIZE,
           transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
         }}
+        onDoubleClick={handleDoubleClick}
       >
-        {/* Board content (cards, connections) will be rendered here */}
+        {boardData?.cards.map((card) => (
+          <Card
+            key={card.id}
+            card={card}
+            onUpdate={handleUpdateCard}
+            onDelete={handleDeleteCard}
+          />
+        ))}
       </div>
     </div>
   );
