@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import type { Card, Connection } from '../types';
 
 interface ConnectionLineProps {
@@ -83,7 +83,7 @@ function buildBezierPath(start: Point, end: Point): string {
   return `M ${start.x} ${start.y} Q ${cx} ${cy} ${end.x} ${end.y}`;
 }
 
-export function ConnectionLine({
+export const ConnectionLine = memo(function ConnectionLine({
   connection,
   fromCard,
   toCard,
@@ -152,4 +152,4 @@ export function ConnectionLine({
       )}
     </g>
   );
-}
+});

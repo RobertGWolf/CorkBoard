@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Board } from './components/Board';
 import { Toolbar } from './components/Toolbar';
+import { StatusBar } from './components/StatusBar';
 import { useBoards, useCreateBoard } from './hooks/useBoards';
 import { useBoardStore } from './stores/boardStore';
 
@@ -66,6 +67,7 @@ function AppContent() {
     <div className="h-screen w-screen flex flex-col">
       <Toolbar />
       <Board />
+      <StatusBar />
     </div>
   );
 }

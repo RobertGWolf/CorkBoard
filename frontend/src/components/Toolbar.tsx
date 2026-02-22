@@ -3,6 +3,8 @@ import { useBoardStore } from '../stores/boardStore';
 import { useBoards, useCreateBoard, useDeleteBoard, useUpdateBoard } from '../hooks/useBoards';
 import { useCreateCard } from '../hooks/useCards';
 
+const GRID_SIZE_OPTIONS = [10, 20, 40] as const;
+
 export function Toolbar() {
   const { data: boards } = useBoards();
   const createBoard = useCreateBoard();
@@ -12,15 +14,33 @@ export function Toolbar() {
   const currentBoardId = useBoardStore((s) => s.currentBoardId);
   const setCurrentBoardId = useBoardStore((s) => s.setCurrentBoardId);
   const connectMode = useBoardStore((s) => s.connectMode);
+  const snapEnabled = useBoardStore((s) => s.snapEnabled);
+  const gridSize = useBoardStore((s) => s.gridSize);
+  const toggleSnap = useBoardStore((s) => s.toggleSnap);
+  const setGridSize = useBoardStore((s) => s.setGridSize);
 
   const createCard = useCreateCard(currentBoardId ?? '');
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const settingsRef = useRef<HTMLDivElement>(null);
 
   const currentBoard = boards?.find((b) => b.id === currentBoardId);
+
+  // Close settings dropdown on outside click
+  useEffect(() => {
+    if (!showSettings) return;
+    const handleClick = (e: MouseEvent) => {
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+        setShowSettings(false);
+      }
+    };
+    document.addEventListener('pointerdown', handleClick);
+    return () => document.removeEventListener('pointerdown', handleClick);
+  }, [showSettings]);
 
   const handleSwitchBoard = useCallback(
     (id: string) => {
@@ -158,6 +178,54 @@ export function Toolbar() {
       >
         Connect
       </button>
+
+      <div className="h-6 w-px bg-amber-300" />
+
+      {/* Snap Toggle */}
+      <button
+        onClick={toggleSnap}
+        className={`px-3 py-1 text-sm rounded ${
+          snapEnabled
+            ? 'bg-amber-600 text-white'
+            : 'text-amber-800 hover:bg-amber-200'
+        }`}
+        title="Toggle snap-to-grid (G)"
+      >
+        Snap
+      </button>
+
+      <div className="h-6 w-px bg-amber-300" />
+
+      {/* Settings gear — grid size config */}
+      <div className="relative" ref={settingsRef}>
+        <button
+          onClick={() => setShowSettings(!showSettings)}
+          className="px-2 py-1 text-sm text-amber-800 hover:bg-amber-200 rounded"
+          title="Settings"
+        >
+          &#9881;
+        </button>
+        {showSettings && (
+          <div className="absolute top-full right-0 mt-1 bg-white border border-amber-200 rounded shadow-lg z-50 p-3 min-w-40">
+            <div className="text-xs font-medium text-amber-800 mb-2">Grid Size</div>
+            <div className="flex gap-2">
+              {GRID_SIZE_OPTIONS.map((size) => (
+                <button
+                  key={size}
+                  onClick={() => setGridSize(size)}
+                  className={`px-2 py-1 text-xs rounded border ${
+                    gridSize === size
+                      ? 'bg-amber-600 text-white border-amber-600'
+                      : 'text-amber-800 border-amber-300 hover:bg-amber-50'
+                  }`}
+                >
+                  {size}px
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="flex-1" />
 

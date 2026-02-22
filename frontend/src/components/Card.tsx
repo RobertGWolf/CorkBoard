@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { useBoardStore } from '../stores/boardStore';
 import { CardEditor } from './CardEditor';
@@ -10,15 +10,17 @@ import type { Card as CardType } from '../types';
 interface CardProps {
   card: CardType;
   onUpdate: (data: Partial<CardType> & { id: string }) => void;
+  onUpdateWithUndo?: (data: Partial<CardType> & { id: string }, actionType?: 'move' | 'resize' | 'content' | 'color') => void;
   onDelete: (id: string) => void;
   connectMode?: boolean;
   isConnectSource?: boolean;
   onConnectClick?: (cardId: string) => void;
 }
 
-export function Card({
+export const Card = memo(function Card({
   card,
   onUpdate,
+  onUpdateWithUndo,
   onDelete,
   connectMode = false,
   isConnectSource = false,
@@ -32,9 +34,21 @@ export function Card({
 
   const isSelected = selectedCardId === card.id;
 
+  // Resize records undo via the onUpdateWithUndo callback
+  const handleResizeEnd = useCallback(
+    (data: Partial<CardType> & { id: string }) => {
+      if (onUpdateWithUndo && data.width !== undefined && data.height !== undefined) {
+        onUpdateWithUndo(data, 'resize');
+      } else {
+        onUpdate(data);
+      }
+    },
+    [onUpdate, onUpdateWithUndo]
+  );
+
   const { handleResizeStart, isResizing, displayWidth, displayHeight } = useResize({
     card,
-    onResizeEnd: onUpdate,
+    onResizeEnd: handleResizeEnd,
   });
 
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
@@ -79,25 +93,45 @@ export function Card({
 
   const handleColorChange = useCallback(
     (color: string) => {
-      onUpdate({ id: card.id, color });
+      if (onUpdateWithUndo) {
+        onUpdateWithUndo({ id: card.id, color }, 'color');
+      } else {
+        onUpdate({ id: card.id, color });
+      }
     },
-    [card.id, onUpdate]
+    [card.id, onUpdate, onUpdateWithUndo]
   );
 
   const handleSave = useCallback(
     (content: string) => {
       setIsEditing(false);
       if (content !== card.content) {
-        onUpdate({ id: card.id, content });
+        if (onUpdateWithUndo) {
+          onUpdateWithUndo({ id: card.id, content }, 'content');
+        } else {
+          onUpdate({ id: card.id, content });
+        }
       }
     },
-    [card.id, card.content, onUpdate]
+    [card.id, card.content, onUpdate, onUpdateWithUndo]
   );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (isEditing) return;
       if (connectMode) return;
+
+      // Enter — select card; if already selected, enter edit mode
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (isSelected) {
+          setIsEditing(true);
+        } else {
+          selectCard(card.id);
+        }
+        return;
+      }
+
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         if (card.content.trim() === '') {
@@ -111,7 +145,7 @@ export function Card({
         useBoardStore.getState().clearSelection();
       }
     },
-    [card.id, card.content, isEditing, connectMode, onDelete]
+    [card.id, card.content, isEditing, isSelected, connectMode, onDelete, selectCard]
   );
 
   const style: React.CSSProperties = {
@@ -141,7 +175,7 @@ export function Card({
   return (
     <div
       ref={setNodeRef}
-      className={`absolute rounded-lg shadow-md select-none ${ringClass} ${
+      className={`absolute rounded-lg shadow-md select-none outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${ringClass} ${
         connectMode ? 'cursor-pointer' : 'cursor-default'
       }`}
       style={style}
@@ -152,7 +186,7 @@ export function Card({
       onPointerEnter={() => setIsHovered(true)}
       onPointerLeave={() => setIsHovered(false)}
       {...(connectMode ? {} : listeners)}
-      {...(connectMode ? {} : attributes)}
+      {...(connectMode ? { tabIndex: 0 } : attributes)}
     >
       {/* Color indicator — visible on hover/selected, hidden in connect mode */}
       {(isSelected || isHovered) && !isEditing && !connectMode && (
@@ -191,4 +225,4 @@ export function Card({
       {showResizeHandle && <ResizeHandle onResizeStart={handleResizeStart} />}
     </div>
   );
-}
+});

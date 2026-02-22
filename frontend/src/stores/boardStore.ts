@@ -5,6 +5,7 @@ interface BoardState {
   currentBoardId: string | null;
   viewport: Viewport;
   snapEnabled: boolean;
+  gridSize: number; // 10, 20, or 40 — pixel-equivalent grid spacing
   connectMode: boolean;
   connectSourceId: string | null;
   selectedCardId: string | null;
@@ -14,6 +15,7 @@ interface BoardState {
   setViewport: (viewport: Partial<Viewport>) => void;
   setZoom: (zoom: number) => void;
   toggleSnap: () => void;
+  setGridSize: (size: number) => void;
   toggleConnectMode: () => void;
   setConnectSource: (id: string | null) => void;
   selectCard: (id: string | null) => void;
@@ -25,6 +27,7 @@ export const useBoardStore = create<BoardState>((set) => ({
   currentBoardId: null,
   viewport: { x: 0, y: 0, zoom: 1 },
   snapEnabled: false,
+  gridSize: 20,
   connectMode: false,
   connectSourceId: null,
   selectedCardId: null,
@@ -43,6 +46,8 @@ export const useBoardStore = create<BoardState>((set) => ({
     })),
 
   toggleSnap: () => set((state) => ({ snapEnabled: !state.snapEnabled })),
+
+  setGridSize: (size) => set({ gridSize: size }),
 
   toggleConnectMode: () =>
     set((state) => ({
