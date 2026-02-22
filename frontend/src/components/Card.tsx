@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { useDraggable } from '@dnd-kit/core';
 import { useBoardStore } from '../stores/boardStore';
 import { CardEditor } from './CardEditor';
 import type { Card as CardType } from '../types';
@@ -15,6 +16,11 @@ export function Card({ card, onUpdate, onDelete }: CardProps) {
   const [isEditing, setIsEditing] = useState(false);
 
   const isSelected = selectedCardId === card.id;
+
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({
+    id: card.id,
+    disabled: isEditing,
+  });
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -62,24 +68,31 @@ export function Card({ card, onUpdate, onDelete }: CardProps) {
     [card.id, card.content, isEditing, onDelete]
   );
 
+  const style: React.CSSProperties = {
+    left: `${card.x}%`,
+    top: `${card.y}%`,
+    width: `${card.width}%`,
+    height: `${card.height}%`,
+    backgroundColor: card.color,
+    zIndex: card.z_index,
+    ...(transform
+      ? { transform: `translate(${transform.x}px, ${transform.y}px)` }
+      : {}),
+  };
+
   return (
     <div
+      ref={setNodeRef}
       className={`absolute rounded-lg shadow-md overflow-hidden cursor-default select-none
         ${isSelected ? 'ring-2 ring-amber-500' : ''}
         ${isEditing ? 'ring-2 ring-blue-400' : ''}
       `}
-      style={{
-        left: `${card.x}%`,
-        top: `${card.y}%`,
-        width: `${card.width}%`,
-        height: `${card.height}%`,
-        backgroundColor: card.color,
-        zIndex: card.z_index,
-      }}
+      style={style}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
       onKeyDown={handleKeyDown}
-      tabIndex={0}
+      {...listeners}
+      {...attributes}
     >
       {isEditing ? (
         <CardEditor

@@ -1,6 +1,8 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
+import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { useBoardStore } from '../stores/boardStore';
 import { useBoardData, useCreateCard, useDeleteCard, useUpdateCard } from '../hooks/useCards';
+import { useBoardDrag } from '../hooks/useDrag';
 import { Card } from './Card';
 import type { Card as CardType } from '../types';
 
@@ -17,6 +19,36 @@ export function Board() {
   const updateCard = useUpdateCard(currentBoardId ?? '');
   const deleteCard = useDeleteCard(currentBoardId ?? '');
 
+  const cards = useMemo(() => boardData?.cards ?? [], [boardData?.cards]);
+
+  const handleUpdateCard = useCallback(
+    (data: Partial<CardType> & { id: string }) => {
+      updateCard.mutate(data);
+    },
+    [updateCard]
+  );
+
+  const handleDeleteCard = useCallback(
+    (id: string) => {
+      deleteCard.mutate(id);
+      clearSelection();
+    },
+    [deleteCard, clearSelection]
+  );
+
+  // Drag system
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    })
+  );
+
+  const { handleDragStart, handleDragEnd } = useBoardDrag({
+    cards,
+    onUpdateCard: handleUpdateCard,
+  });
+
+  // Pan/zoom
   const isPanning = useRef(false);
   const panStart = useRef({ x: 0, y: 0 });
   const viewportStart = useRef({ x: 0, y: 0 });
@@ -84,14 +116,12 @@ export function Board() {
       if (e.target !== e.currentTarget) return;
       if (!currentBoardId) return;
 
-      // Convert screen position to board percentage
       const rect = boardInnerRef.current?.getBoundingClientRect();
       if (!rect) return;
 
       const boardX = ((e.clientX - rect.left) / rect.width) * 100;
       const boardY = ((e.clientY - rect.top) / rect.height) * 100;
 
-      // Clamp to valid range and offset so card is centered on cursor
       const x = Math.max(0, Math.min(85, boardX - 7.5));
       const y = Math.max(0, Math.min(90, boardY - 5));
 
@@ -100,48 +130,39 @@ export function Board() {
     [currentBoardId, createCard]
   );
 
-  const handleUpdateCard = useCallback(
-    (data: Partial<CardType> & { id: string }) => {
-      updateCard.mutate(data);
-    },
-    [updateCard]
-  );
-
-  const handleDeleteCard = useCallback(
-    (id: string) => {
-      deleteCard.mutate(id);
-      clearSelection();
-    },
-    [deleteCard, clearSelection]
-  );
-
   return (
-    <div
-      className="w-full h-full overflow-hidden relative bg-amber-50"
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onWheel={handleWheel}
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
     >
       <div
-        ref={boardInnerRef}
-        className="absolute origin-top-left"
-        style={{
-          width: BOARD_SIZE,
-          height: BOARD_SIZE,
-          transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
-        }}
-        onDoubleClick={handleDoubleClick}
+        className="w-full h-full overflow-hidden relative bg-amber-50"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onWheel={handleWheel}
       >
-        {boardData?.cards.map((card) => (
-          <Card
-            key={card.id}
-            card={card}
-            onUpdate={handleUpdateCard}
-            onDelete={handleDeleteCard}
-          />
-        ))}
+        <div
+          ref={boardInnerRef}
+          className="absolute origin-top-left"
+          style={{
+            width: BOARD_SIZE,
+            height: BOARD_SIZE,
+            transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+          }}
+          onDoubleClick={handleDoubleClick}
+        >
+          {cards.map((card) => (
+            <Card
+              key={card.id}
+              card={card}
+              onUpdate={handleUpdateCard}
+              onDelete={handleDeleteCard}
+            />
+          ))}
+        </div>
       </div>
-    </div>
+    </DndContext>
   );
 }
